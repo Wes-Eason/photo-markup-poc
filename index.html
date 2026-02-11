@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Photo Markup</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #f5f5f5;
+            overflow: hidden;
+            touch-action: none;
+        }
+        
+        #app {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        
+        #toolbar {
+            background: #fff;
+            padding: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            z-index: 10;
+        }
+        
+        button {
+            padding: 12px 20px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            background: white;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-weight: 500;
+        }
+        
+        button:active {
+            transform: scale(0.95);
+        }
+        
+        button.active {
+            border-color: #007AFF;
+            background: #E3F2FF;
+        }
+        
+        #loadPhoto {
+            background: #007AFF;
+            color: white;
+            border-color: #007AFF;
+        }
+        
+        #savePhoto {
+            background: #34C759;
+            color: white;
+            border-color: #34C759;
+        }
+        
+        #savePhoto:disabled {
+            background: #ccc;
+            border-color: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .tool-red { border-color: #FF3B30; }
+        .tool-red.active { background: #FFE5E5; border-color: #FF3B30; }
+        
+        .tool-blue { border-color: #007AFF; }
+        .tool-blue.active { background: #E3F2FF; border-color: #007AFF; }
+        
+        .tool-green { border-color: #34C759; }
+        .tool-green.active { background: #E5F9E9; border-color: #34C759; }
+        
+        #canvasContainer {
+            flex: 1;
+            position: relative;
+            overflow: auto;
+            background: #f5f5f5;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        #canvas {
+            display: none;
+            max-width: 100%;
+            max-height: 100%;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        
+        #canvas.active {
+            display: block;
+        }
+        
+        #placeholder {
+            color: #999;
+            font-size: 18px;
+            text-align: center;
+            padding: 20px;
+        }
+        
+        #photoInput {
+            display: none;
+        }
+        
+        #clearAll {
+            background: #FF3B30;
+            color: white;
+            border-color: #FF3B30;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div id="toolbar">
+            <input type="file" id="photoInput" accept="image/*">
+            <button id="loadPhoto">📷 Load Photo</button>
+            <button id="toolX" class="tool-red">✖️ Red X</button>
+            <button id="toolCircle" class="tool-blue">⭕ Blue Circle</button>
+            <button id="toolTriangle" class="tool-green">🔺 Green Triangle</button>
+            <button id="clearAll">🗑️ Clear All</button>
+            <button id="savePhoto" disabled>💾 Save</button>
+        </div>
+        
+        <div id="canvasContainer">
+            <canvas id="canvas"></canvas>
+            <div id="placeholder">👆 Load a photo to get started</div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const photoInput = document.getElementById('photoInput');
+        const loadPhotoBtn = document.getElementById('loadPhoto');
+        const savePhotoBtn = document.getElementById('savePhoto');
+        const clearAllBtn = document.getElementById('clearAll');
+        const placeholder = document.getElementById('placeholder');
+        
+        let currentTool = 'x';
+        let shapes = [];
+        let originalImage = null;
+        
+        // Tool selection
+        document.getElementById('toolX').addEventListener('click', () => selectTool('x', 'toolX'));
+        document.getElementById('toolCircle').addEventListener('click', () => selectTool('circle', 'toolCircle'));
+        document.getElementById('toolTriangle').addEventListener('click', () => selectTool('triangle', 'toolTriangle'));
+        
+        function selectTool(tool, buttonId) {
+            currentTool = tool;
+            document.querySelectorAll('#toolbar button').forEach(btn => {
+                if (btn.id.startsWith('tool')) {
+                    btn.classList.remove('active');
+                }
+            });
+            document.getElementById(buttonId).classList.add('active');
+        }
+        
+        // Initialize with red X selected
+        selectTool('x', 'toolX');
+        
+        // Load photo
+        loadPhotoBtn.addEventListener('click', () => photoInput.click());
+        
+        photoInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = () => {
+                    originalImage = img;
+                    
+                    // Set canvas size to match image
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    
+                    // Clear shapes
+                    shapes = [];
+                    
+                    // Draw image
+                    redrawCanvas();
+                    
+                    // Show canvas
+                    canvas.classList.add('active');
+                    placeholder.style.display = 'none';
+                    savePhotoBtn.disabled = false;
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+        
+        // Drawing functions with cursor-style outline
+        function drawX(x, y) {
+            const size = 40;
+            ctx.lineCap = 'round';
+            
+            // White outline (cursor effect)
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 12;
+            ctx.beginPath();
+            ctx.moveTo(x - size, y - size);
+            ctx.lineTo(x + size, y + size);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(x + size, y - size);
+            ctx.lineTo(x - size, y + size);
+            ctx.stroke();
+            
+            // Red X on top
+            ctx.strokeStyle = '#FF3B30';
+            ctx.lineWidth = 8;
+            ctx.beginPath();
+            ctx.moveTo(x - size, y - size);
+            ctx.lineTo(x + size, y + size);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(x + size, y - size);
+            ctx.lineTo(x - size, y + size);
+            ctx.stroke();
+        }
+        
+        function drawCircle(x, y) {
+            const radius = 35;
+            
+            // White outline (cursor effect)
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 12;
+            ctx.beginPath();
+            ctx.arc(x, y, radius, 0, 2 * Math.PI);
+            ctx.stroke();
+            
+            // Blue circle on top
+            ctx.strokeStyle = '#007AFF';
+            ctx.lineWidth = 8;
+            ctx.beginPath();
+            ctx.arc(x, y, radius, 0, 2 * Math.PI);
+            ctx.stroke();
+        }
+        
+        function drawTriangle(x, y) {
+            const size = 40;
+            
+            // White outline (cursor effect)
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 10;
+            ctx.lineJoin = 'round';
+            ctx.beginPath();
+            ctx.moveTo(x, y - size);
+            ctx.lineTo(x - size, y + size);
+            ctx.lineTo(x + size, y + size);
+            ctx.closePath();
+            ctx.stroke();
+            
+            // Green triangle fill
+            ctx.fillStyle = '#34C759';
+            ctx.fill();
+            
+            // Green outline on top
+            ctx.strokeStyle = '#34C759';
+            ctx.lineWidth = 6;
+            ctx.beginPath();
+            ctx.moveTo(x, y - size);
+            ctx.lineTo(x - size, y + size);
+            ctx.lineTo(x + size, y + size);
+            ctx.closePath();
+            ctx.stroke();
+        }
+        
+        function redrawCanvas() {
+            if (!originalImage) return;
+            
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw original image
+            ctx.drawImage(originalImage, 0, 0);
+            
+            // Draw all shapes
+            shapes.forEach(shape => {
+                if (shape.type === 'x') drawX(shape.x, shape.y);
+                else if (shape.type === 'circle') drawCircle(shape.x, shape.y);
+                else if (shape.type === 'triangle') drawTriangle(shape.x, shape.y);
+            });
+        }
+        
+        // Handle touch and mouse events
+        function getCanvasCoordinates(e) {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            
+            let clientX, clientY;
+            if (e.touches) {
+                clientX = e.touches[0].clientX;
+                clientY = e.touches[0].clientY;
+            } else {
+                clientX = e.clientX;
+                clientY = e.clientY;
+            }
+            
+            return {
+                x: (clientX - rect.left) * scaleX,
+                y: (clientY - rect.top) * scaleY
+            };
+        }
+        
+        function handleDrawing(e) {
+            e.preventDefault();
+            if (!originalImage) return;
+            
+            const coords = getCanvasCoordinates(e);
+            shapes.push({
+                type: currentTool,
+                x: coords.x,
+                y: coords.y
+            });
+            
+            redrawCanvas();
+        }
+        
+        canvas.addEventListener('touchstart', handleDrawing);
+        canvas.addEventListener('click', handleDrawing);
+        
+        // Clear all shapes
+        clearAllBtn.addEventListener('click', () => {
+            shapes = [];
+            redrawCanvas();
+        });
+        
+        // Save photo
+        savePhotoBtn.addEventListener('click', () => {
+            canvas.toBlob((blob) => {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `marked-up-photo-${Date.now()}.png`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }, 'image/png');
+        });
+    </script>
+</body>
+</html>
