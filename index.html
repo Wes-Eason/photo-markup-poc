@@ -38,14 +38,15 @@
         }
         
         button {
-            padding: 6px 12px;
+            padding: 8px 10px;
             border: 1px solid #c6c6c8;
             border-radius: 6px;
             background: white;
-            font-size: 14px;
+            font-size: 18px;
             cursor: pointer;
             transition: all 0.2s;
             font-weight: 400;
+            min-width: 36px;
         }
         
         button:active {
@@ -127,13 +128,13 @@
     <div id="app">
         <div id="toolbar">
             <input type="file" id="photoInput" accept="image/*">
-            <button id="loadPhoto">📷 Load</button>
-            <button id="toolX" class="tool-red">✖️ X</button>
-            <button id="toolCircle" class="tool-blue">⭕ Circle</button>
-            <button id="toolTriangle" class="tool-green">🔺 Triangle</button>
-            <button id="undo">↩️ Undo</button>
-            <button id="clearAll">🗑️ Clear</button>
-            <button id="savePhoto" disabled>💾 Save</button>
+            <button id="loadPhoto">📷</button>
+            <button id="toolX" class="tool-red">✖️</button>
+            <button id="toolCircle" class="tool-blue">⭕</button>
+            <button id="toolTriangle" class="tool-green">🔺</button>
+            <button id="undo">↩️</button>
+            <button id="clearAll">🗑️</button>
+            <button id="savePhoto" disabled>💾</button>
         </div>
         
         <div id="canvasContainer">
@@ -383,10 +384,12 @@
         // Save photo
         savePhotoBtn.addEventListener('click', () => {
             canvas.toBlob((blob) => {
+                const now = new Date();
+                const timestamp = now.toISOString().replace(/:/g, '-').replace(/\..+/, '');
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = `marked-up-photo-${Date.now()}.png`;
+                a.download = `${timestamp}_marked-up.png`;
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
